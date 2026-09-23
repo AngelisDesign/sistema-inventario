@@ -34,9 +34,9 @@
                 <div class="mb-3">
                   <label class="form-label">Producto</label>
                   <select class="form-select">
-                    <option>Cuaderno A4 Rayado</option>
-                    <option>Bolígrafo Azul</option>
-                    <option>Resma A4 500 hojas</option>
+                    {% for p in productos %}
+                      <option value="{{ p.id }}">{{ p.sku }} - {{ p.name }}</option>
+                    {% endfor %}
                   </select>
                 </div>
                 <div class="mb-3">
@@ -65,16 +65,46 @@
           <div class="card card-stat">
             <div class="card-body">
               <h5 class="mb-3">Historial</h5>
+              <p class="text-muted small">Mostrando {{ movimientos|length }} movimientos recientes</p>
+
               <table class="table table-hover align-middle">
                 <thead>
-                  <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th class="text-end">Cantidad</th><th class="text-end">Stock final</th><th>Usuario</th></tr>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th>Tipo</th>
+                    <th class="text-end">Cantidad</th>
+                    <th class="text-end">Stock final</th>
+                    <th>Usuario</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  <tr><td>22/09 10:15</td><td>Cuaderno A4 Rayado</td><td><span class="badge badge-in">Entrada</span></td><td class="text-end">+50</td><td class="text-end">120</td><td>admin</td></tr>
-                  <tr><td>22/09 09:40</td><td>Bolígrafo Azul</td><td><span class="badge badge-out">Salida</span></td><td class="text-end">-12</td><td class="text-end">8</td><td>admin</td></tr>
-                  <tr><td>22/09 09:05</td><td>Resma A4 500 hojas</td><td><span class="badge badge-in">Entrada</span></td><td class="text-end">+20</td><td class="text-end">45</td><td>admin</td></tr>
-                  <tr><td>21/09 17:20</td><td>Marcador Pizarra</td><td><span class="badge badge-adjust">Ajuste</span></td><td class="text-end">-3</td><td class="text-end">0</td><td>admin</td></tr>
-                  <tr><td>21/09 15:00</td><td>Carpeta 3 anillos</td><td><span class="badge badge-in">Entrada</span></td><td class="text-end">+60</td><td class="text-end">60</td><td>admin</td></tr>
+                  {% for m in movimientos %}
+                  <tr>
+                    <td>{{ m.created_at.strftime('%d/%m %H:%M') }}</td>
+                    <td>{{ m.sku }} - {{ m.product_name }}</td>
+                    <td>
+                      {% if m.type == 'in' %}
+                        <span class="badge badge-in">Entrada</span>
+                      {% elif m.type == 'out' %}
+                        <span class="badge badge-out">Salida</span>
+                      {% else %}
+                        <span class="badge badge-adjust">Ajuste</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">
+                      {% if m.type == 'in' %}+{% elif m.type == 'out' %}-{% endif %}{{ m.quantity }}
+                    </td>
+                    <td class="text-end">{{ m.stock_after }}</td>
+                    <td>{{ m.user_name }}</td>
+                  </tr>
+                  {% else %}
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                      No hay movimientos registrados.
+                    </td>
+                  </tr>
+                  {% endfor %}
                 </tbody>
               </table>
             </div>

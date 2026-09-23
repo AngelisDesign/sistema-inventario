@@ -34,3 +34,27 @@ INSERT INTO products (sku, name, category_id, stock, stock_min, price) VALUES
   ('P-005', 'Carpeta 3 anillos',       1,  60, 10, 2200.00),
   ('P-006', 'Detergente 1L',           2,  30, 10, 1800.00),
   ('P-007', 'Mouse inalámbrico',       3,  12,  5, 9500.00);
+
+  CREATE TABLE IF NOT EXISTS inventory_movements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  product_id INT NOT NULL,
+  type ENUM('in', 'out', 'adjust') NOT NULL,
+  quantity INT NOT NULL,
+  stock_before INT NOT NULL,
+  stock_after INT NOT NULL,
+  note VARCHAR(255),
+  user_name VARCHAR(100) DEFAULT 'admin',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  INDEX idx_product (product_id),
+  INDEX idx_created (created_at)
+);
+
+INSERT INTO inventory_movements
+  (product_id, type, quantity, stock_before, stock_after, note, user_name, created_at)
+VALUES
+  (1, 'in',    50,  70, 120, 'Compra a proveedor', 'admin', NOW() - INTERVAL 2 HOUR),
+  (2, 'out',   12,  20,   8, 'Venta mostrador',    'admin', NOW() - INTERVAL 3 HOUR),
+  (3, 'in',    20,  25,  45, 'Reposición',         'admin', NOW() - INTERVAL 4 HOUR),
+  (4, 'adjust', 3,   3,   0, 'Producto dañado',    'admin', NOW() - INTERVAL 1 DAY),
+  (5, 'in',    60,   0,  60, 'Compra inicial',     'admin', NOW() - INTERVAL 2 DAY);

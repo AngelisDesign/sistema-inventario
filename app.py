@@ -24,7 +24,24 @@ def productos():
 
 @app.route("/movimientos")
 def movimientos():
-    return render_template("movimientos.html")
+    movimientos = query("""
+        SELECT m.id, m.type, m.quantity, m.stock_before, m.stock_after,
+               m.note, m.user_name, m.created_at,
+               p.sku, p.name AS product_name
+        FROM inventory_movements m
+        JOIN products p ON p.id = m.product_id
+        ORDER BY m.created_at DESC
+        LIMIT 50
+    """)
+    productos = query("""
+        SELECT id, sku, name
+        FROM products
+        WHERE active = 1
+        ORDER BY name
+    """)
+    return render_template("movimientos.html",
+                           movimientos=movimientos,
+                           productos=productos)
 
 
 if __name__ == "__main__":
