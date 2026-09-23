@@ -1,4 +1,5 @@
 import mysql.connector
+from contextlib import contextmanager
 
 DB_CONFIG = {
     "host": "localhost",
@@ -25,7 +26,7 @@ def query(sql, params=None):
 
 
 def execute(sql, params=None):
-    """Ejecuta INSERT/UPDATE/DELETE y devuelve el id insertado."""
+    """Ejecuta INSERT/UPDATE/DELETE simple (sin transacción)."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(sql, params or ())
@@ -34,3 +35,26 @@ def execute(sql, params=None):
     cursor.close()
     conn.close()
     return last_id
+
+
+@contextmanager
+def transaction():
+    """
+    Uso:
+        with transaction() as cursor:
+            cursor.execute("INSERT ...")
+            cursor.execute("UPDATE ...")
+    Si algo falla, se deshace todo automáticamente.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        conn.start_transaction()
+        yield cursor
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
