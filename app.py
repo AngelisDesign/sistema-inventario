@@ -7,7 +7,69 @@ app.secret_key = "cambia-esto-en-produccion"
 
 @app.route("/")
 def dashboard():
-    return render_template("index.html")
+    # Métricas generales
+    total_productos = query("""
+        SELECT COUNT(*) AS total
+        FROM products
+        WHERE active = 1
+    """)[0]["total"]
+
+    stock_bajo = query("""
+        SELECT COUNT(*) AS total
+        FROM products
+        WHERE active = 1
+          AND stock > 0
+          AND stock <= stock_min
+    """)[0]["total"]
+
+    sin_stock = query("""
+        SELECT COUNT(*) AS total
+        FROM products
+        WHERE active = 1
+          AND stock = 0
+    """)[0]["total"]
+
+    movimientos_hoy = query("""
+        SELECT COUNT(*) AS total
+        FROM inventory_movements
+        WHERE DATE(created_at) = CURDATE()
+    """)[0]["total"]
+
+    valor_inventario = query("""
+        SELECT COALESCE(SUM(stock * price), 0) AS total
+        FROM products
+        WHERE active = 1
+    """)[0]["total"]
+
+    # Últimos 5 movimientos
+    ultimos_movimientos = query("""
+        SELECT m.id, m.type, m.quantity, m.stock_after,
+               m.created_at, m.user_name,
+               p.sku, p.name AS product_name
+        FROM inventory_movements m
+        JOIN products p ON p.id = m.product_id
+        ORDER BY m.created_at DESC
+        LIMIT 5
+    """)
+
+    # Productos que requieren atención (stock bajo o sin stock)
+    alertas = query("""
+        SELECT p.id, p.sku, p.name, p.stock, p.stock_min
+        FROM products p
+        WHERE p.active = 1
+          AND p.stock <= p.stock_min
+        ORDER BY p.stock ASC
+        LIMIT 10
+    """)
+
+    return render_template("index.html",
+                           total_productos=total_productos,
+                           stock_bajo=stock_bajo,
+                           sin_stock=sin_stock,
+                           movimientos_hoy=movimientos_hoy,
+                           valor_inventario=valor_inventario,
+                           ultimos_movimientos=ultimos_movimientos,
+                           alertas=alertas)
 
 
 @app.route("/productos")
