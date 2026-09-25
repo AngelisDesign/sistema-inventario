@@ -7,7 +7,6 @@ app.secret_key = "cambia-esto-en-produccion"
 
 @app.route("/")
 def dashboard():
-    # Métricas generales
     total_productos = query("""
         SELECT COUNT(*) AS total
         FROM products
@@ -41,7 +40,6 @@ def dashboard():
         WHERE active = 1
     """)[0]["total"]
 
-    # Últimos 5 movimientos
     ultimos_movimientos = query("""
         SELECT m.id, m.type, m.quantity, m.stock_after,
                m.created_at, m.user_name,
@@ -52,7 +50,6 @@ def dashboard():
         LIMIT 5
     """)
 
-    # Productos que requieren atención (stock bajo o sin stock)
     alertas = query("""
         SELECT p.id, p.sku, p.name, p.stock, p.stock_min
         FROM products p
@@ -74,15 +71,32 @@ def dashboard():
 
 @app.route("/productos")
 def productos():
-    productos = query("""
-        SELECT p.id, p.sku, p.name, c.name AS category,
-               p.stock, p.stock_min, p.price
-        FROM products p
-        LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.active = 1
-        ORDER BY p.name
-    """)
-    return render_template("productos.html", productos=productos)
+    q = (request.args.get("q") or "").strip()
+
+    if q:
+        productos = query("""
+            SELECT p.id, p.sku, p.name, c.name AS category,
+                   p.stock, p.stock_min, p.price
+            FROM products p
+            LEFT JOIN categories c ON c.id = p.category_id
+            WHERE p.active = 1
+              AND (p.name LIKE %s OR p.sku LIKE %s)
+            ORDER BY p.name
+        """, (f"%{q}%", f"%{q}%"))
+    else:
+        productos = query("""
+            SELECT p.id, p.sku, p.name, c.name AS category,
+                   p.stock, p.stock_min, p.price
+            FROM products p
+            LEFT JOIN categories c ON c.id = p.category_id
+            WHERE p.active = 1
+            ORDER BY p.name
+        """)
+
+    return render_template("productos.html",
+                           productos=productos,
+                           q=q)
+
 
 @app.route("/productos/nuevo", methods=["GET"])
 def producto_nuevo():
@@ -101,7 +115,6 @@ def producto_crear():
     stock_min = request.form.get("stock_min", type=int) or 0
     price = request.form.get("price", type=float) or 0.0
 
-    # Validaciones
     errores = []
     if not sku:
         errores.append("El SKU es obligatorio.")
@@ -114,7 +127,6 @@ def producto_crear():
     if price < 0:
         errores.append("El precio no puede ser negativo.")
 
-    # SKU duplicado
     existente = query("SELECT id FROM products WHERE sku = %s", (sku,))
     if existente:
         errores.append(f"Ya existe un producto con el SKU {sku}.")
@@ -127,7 +139,6 @@ def producto_crear():
                                producto=request.form,
                                categorias=categorias)
 
-    # Insertar
     try:
         with transaction() as cursor:
             cursor.execute("""
@@ -142,6 +153,7 @@ def producto_crear():
         return render_template("producto_form.html",
                                producto=request.form,
                                categorias=categorias)
+
 
 @app.route("/productos/<int:id>/editar", methods=["GET"])
 def producto_editar(id):
@@ -158,7 +170,6 @@ def producto_editar(id):
 
 @app.route("/productos/<int:id>/editar", methods=["POST"])
 def producto_actualizar(id):
-    # Verificar que exista
     existente = query("SELECT id FROM products WHERE id = %s", (id,))
     if not existente:
         flash("Producto no encontrado.", "danger")
@@ -183,7 +194,6 @@ def producto_actualizar(id):
     if price < 0:
         errores.append("El precio no puede ser negativo.")
 
-    # SKU duplicado — excluye el propio producto
     duplicado = query(
         "SELECT id FROM products WHERE sku = %s AND id <> %s",
         (sku, id)
@@ -194,9 +204,7 @@ def producto_actualizar(id):
     if errores:
         for e in errores:
             flash(e, "danger")
-        # Recargar el producto actual con los datos del form para no perder cambios
         producto_actual = query("SELECT * FROM products WHERE id = %s", (id,))[0]
-        # Sobrescribe con lo que el usuario escribió
         producto_actual.update({
             "sku": sku, "name": name, "category_id": category_id,
             "stock": stock, "stock_min": stock_min, "price": price,
@@ -220,6 +228,7 @@ def producto_actualizar(id):
         flash(f"Error al actualizar el producto: {e}", "danger")
         return redirect(url_for("producto_editar", id=id))
 
+
 @app.route("/productos/<int:id>/eliminar", methods=["POST"])
 def producto_eliminar(id):
     producto = query("SELECT id, name FROM products WHERE id = %s", (id,))
@@ -238,6 +247,7 @@ def producto_eliminar(id):
         flash(f"Error al eliminar el producto: {e}", "danger")
 
     return redirect(url_for("productos"))
+
 
 @app.route("/movimientos")
 def movimientos():
@@ -268,14 +278,12 @@ def registrar_movimiento():
     cantidad = request.form.get("cantidad", type=int)
     nota = (request.form.get("nota") or "").strip() or None
 
-    # Validaciones básicas
     if not product_id or tipo not in ("in", "out", "adjust") or not cantidad or cantidad <= 0:
         flash("Datos inválidos. Revisa el formulario.", "danger")
         return redirect(url_for("movimientos"))
 
     try:
         with transaction() as cursor:
-            # 1. Bloquea la fila del producto para evitar condiciones de carrera
             cursor.execute(
                 "SELECT stock FROM products WHERE id = %s FOR UPDATE",
                 (product_id,)
@@ -286,12 +294,11 @@ def registrar_movimiento():
 
             stock_antes = row["stock"]
 
-            # 2. Calcula el nuevo stock según el tipo
             if tipo == "in":
                 stock_despues = stock_antes + cantidad
             elif tipo == "out":
                 stock_despues = stock_antes - cantidad
-            else:  # adjust
+            else:
                 stock_despues = stock_antes - cantidad
 
             if stock_despues < 0:
@@ -299,14 +306,12 @@ def registrar_movimiento():
                     f"Stock insuficiente. Disponible: {stock_antes}, solicitado: {cantidad}."
                 )
 
-            # 3. Inserta el movimiento
             cursor.execute("""
                 INSERT INTO inventory_movements
                   (product_id, type, quantity, stock_before, stock_after, note, user_name)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (product_id, tipo, cantidad, stock_antes, stock_despues, nota, "admin"))
 
-            # 4. Actualiza el stock del producto
             cursor.execute(
                 "UPDATE products SET stock = %s WHERE id = %s",
                 (stock_despues, product_id)
