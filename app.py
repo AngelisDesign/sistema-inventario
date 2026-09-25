@@ -84,7 +84,65 @@ def productos():
     """)
     return render_template("productos.html", productos=productos)
 
+@app.route("/productos/nuevo", methods=["GET"])
+def producto_nuevo():
+    categorias = query("SELECT id, name FROM categories ORDER BY name")
+    return render_template("producto_form.html",
+                           producto=None,
+                           categorias=categorias)
 
+
+@app.route("/productos/nuevo", methods=["POST"])
+def producto_crear():
+    sku = (request.form.get("sku") or "").strip().upper()
+    name = (request.form.get("name") or "").strip()
+    category_id = request.form.get("category_id", type=int)
+    stock = request.form.get("stock", type=int) or 0
+    stock_min = request.form.get("stock_min", type=int) or 0
+    price = request.form.get("price", type=float) or 0.0
+
+    # Validaciones
+    errores = []
+    if not sku:
+        errores.append("El SKU es obligatorio.")
+    if not name:
+        errores.append("El nombre es obligatorio.")
+    if stock < 0:
+        errores.append("El stock no puede ser negativo.")
+    if stock_min < 0:
+        errores.append("El stock mínimo no puede ser negativo.")
+    if price < 0:
+        errores.append("El precio no puede ser negativo.")
+
+    # SKU duplicado
+    existente = query("SELECT id FROM products WHERE sku = %s", (sku,))
+    if existente:
+        errores.append(f"Ya existe un producto con el SKU {sku}.")
+
+    if errores:
+        for e in errores:
+            flash(e, "danger")
+        categorias = query("SELECT id, name FROM categories ORDER BY name")
+        return render_template("producto_form.html",
+                               producto=request.form,
+                               categorias=categorias)
+
+    # Insertar
+    try:
+        with transaction() as cursor:
+            cursor.execute("""
+                INSERT INTO products (sku, name, category_id, stock, stock_min, price, active)
+                VALUES (%s, %s, %s, %s, %s, %s, 1)
+            """, (sku, name, category_id, stock, stock_min, price))
+        flash(f"Producto '{name}' creado correctamente.", "success")
+        return redirect(url_for("productos"))
+    except Exception as e:
+        flash(f"Error al crear el producto: {e}", "danger")
+        categorias = query("SELECT id, name FROM categories ORDER BY name")
+        return render_template("producto_form.html",
+                               producto=request.form,
+                               categorias=categorias)
+    
 @app.route("/movimientos")
 def movimientos():
     movimientos = query("""
