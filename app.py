@@ -142,7 +142,84 @@ def producto_crear():
         return render_template("producto_form.html",
                                producto=request.form,
                                categorias=categorias)
-    
+
+@app.route("/productos/<int:id>/editar", methods=["GET"])
+def producto_editar(id):
+    producto = query("SELECT * FROM products WHERE id = %s", (id,))
+    if not producto:
+        flash("Producto no encontrado.", "danger")
+        return redirect(url_for("productos"))
+
+    categorias = query("SELECT id, name FROM categories ORDER BY name")
+    return render_template("producto_form.html",
+                           producto=producto[0],
+                           categorias=categorias)
+
+
+@app.route("/productos/<int:id>/editar", methods=["POST"])
+def producto_actualizar(id):
+    # Verificar que exista
+    existente = query("SELECT id FROM products WHERE id = %s", (id,))
+    if not existente:
+        flash("Producto no encontrado.", "danger")
+        return redirect(url_for("productos"))
+
+    sku = (request.form.get("sku") or "").strip().upper()
+    name = (request.form.get("name") or "").strip()
+    category_id = request.form.get("category_id", type=int)
+    stock = request.form.get("stock", type=int) or 0
+    stock_min = request.form.get("stock_min", type=int) or 0
+    price = request.form.get("price", type=float) or 0.0
+
+    errores = []
+    if not sku:
+        errores.append("El SKU es obligatorio.")
+    if not name:
+        errores.append("El nombre es obligatorio.")
+    if stock < 0:
+        errores.append("El stock no puede ser negativo.")
+    if stock_min < 0:
+        errores.append("El stock mínimo no puede ser negativo.")
+    if price < 0:
+        errores.append("El precio no puede ser negativo.")
+
+    # SKU duplicado — excluye el propio producto
+    duplicado = query(
+        "SELECT id FROM products WHERE sku = %s AND id <> %s",
+        (sku, id)
+    )
+    if duplicado:
+        errores.append(f"Ya existe otro producto con el SKU {sku}.")
+
+    if errores:
+        for e in errores:
+            flash(e, "danger")
+        # Recargar el producto actual con los datos del form para no perder cambios
+        producto_actual = query("SELECT * FROM products WHERE id = %s", (id,))[0]
+        # Sobrescribe con lo que el usuario escribió
+        producto_actual.update({
+            "sku": sku, "name": name, "category_id": category_id,
+            "stock": stock, "stock_min": stock_min, "price": price,
+        })
+        categorias = query("SELECT id, name FROM categories ORDER BY name")
+        return render_template("producto_form.html",
+                               producto=producto_actual,
+                               categorias=categorias)
+
+    try:
+        with transaction() as cursor:
+            cursor.execute("""
+                UPDATE products
+                SET sku = %s, name = %s, category_id = %s,
+                    stock = %s, stock_min = %s, price = %s
+                WHERE id = %s
+            """, (sku, name, category_id, stock, stock_min, price, id))
+        flash(f"Producto '{name}' actualizado correctamente.", "success")
+        return redirect(url_for("productos"))
+    except Exception as e:
+        flash(f"Error al actualizar el producto: {e}", "danger")
+        return redirect(url_for("producto_editar", id=id))
+
 @app.route("/movimientos")
 def movimientos():
     movimientos = query("""
