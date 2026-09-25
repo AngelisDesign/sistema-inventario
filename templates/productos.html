@@ -83,9 +83,14 @@
                      class="btn btn-sm btn-outline-secondary" title="Editar">
                     <i class="bi bi-pencil"></i>
                   </a>
-                  <button class="btn btn-sm btn-outline-danger" title="Eliminar">
-                    <i class="bi bi-trash"></i>
-                  </button>
+                  <form method="POST"
+                        action="{{ url_for('producto_eliminar', id=p.id) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('¿Eliminar {{ p.name }}? El producto se ocultará del listado pero sus movimientos se conservan.');">
+                    <button class="btn btn-sm btn-outline-danger" title="Eliminar">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
                 </td>
               </tr>
               {% else %}

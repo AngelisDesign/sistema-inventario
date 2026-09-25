@@ -220,6 +220,25 @@ def producto_actualizar(id):
         flash(f"Error al actualizar el producto: {e}", "danger")
         return redirect(url_for("producto_editar", id=id))
 
+@app.route("/productos/<int:id>/eliminar", methods=["POST"])
+def producto_eliminar(id):
+    producto = query("SELECT id, name FROM products WHERE id = %s", (id,))
+    if not producto:
+        flash("Producto no encontrado.", "danger")
+        return redirect(url_for("productos"))
+
+    try:
+        with transaction() as cursor:
+            cursor.execute(
+                "UPDATE products SET active = 0 WHERE id = %s",
+                (id,)
+            )
+        flash(f"Producto '{producto[0]['name']}' eliminado.", "success")
+    except Exception as e:
+        flash(f"Error al eliminar el producto: {e}", "danger")
+
+    return redirect(url_for("productos"))
+
 @app.route("/movimientos")
 def movimientos():
     movimientos = query("""
