@@ -4,6 +4,8 @@ from db import query, transaction
 app = Flask(__name__)
 app.secret_key = "cambia-esto-en-produccion"
 
+PER_PAGE = 10
+
 
 @app.route("/")
 def dashboard():
@@ -72,8 +74,21 @@ def dashboard():
 @app.route("/productos")
 def productos():
     q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", type=int) or 1
+    if page < 1:
+        page = 1
+
+    offset = (page - 1) * PER_PAGE
 
     if q:
+        like = f"%{q}%"
+        total = query("""
+            SELECT COUNT(*) AS total
+            FROM products
+            WHERE active = 1
+              AND (name LIKE %s OR sku LIKE %s)
+        """, (like, like))[0]["total"]
+
         productos = query("""
             SELECT p.id, p.sku, p.name, c.name AS category,
                    p.stock, p.stock_min, p.price
@@ -82,8 +97,15 @@ def productos():
             WHERE p.active = 1
               AND (p.name LIKE %s OR p.sku LIKE %s)
             ORDER BY p.name
-        """, (f"%{q}%", f"%{q}%"))
+            LIMIT %s OFFSET %s
+        """, (like, like, PER_PAGE, offset))
     else:
+        total = query("""
+            SELECT COUNT(*) AS total
+            FROM products
+            WHERE active = 1
+        """)[0]["total"]
+
         productos = query("""
             SELECT p.id, p.sku, p.name, c.name AS category,
                    p.stock, p.stock_min, p.price
@@ -91,11 +113,17 @@ def productos():
             LEFT JOIN categories c ON c.id = p.category_id
             WHERE p.active = 1
             ORDER BY p.name
-        """)
+            LIMIT %s OFFSET %s
+        """, (PER_PAGE, offset))
+
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
 
     return render_template("productos.html",
                            productos=productos,
-                           q=q)
+                           q=q,
+                           page=page,
+                           total=total,
+                           total_pages=total_pages)
 
 
 @app.route("/productos/nuevo", methods=["GET"])
